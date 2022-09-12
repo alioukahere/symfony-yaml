@@ -28,18 +28,7 @@ class OrganizationRepository
 
     public function getAll(): array
     {
-        try {
-            $organizations = Yaml::parseFile($this->yamlFilePath);
-        } catch (Throwable $exception) {
-            throw new UnexpectedValueException(
-                "Failed parsing YAML file {$this->yamlFilePath}"
-            );
-        }
-
-        $organizations = $organizations['organizations'] ?? null;
-        if (null === $organizations) {
-            throw new UnexpectedValueException('Failed getting organizations');
-        }
+        $organizations = $this->readYamlFile();
 
         $data = [];
         foreach ($organizations as $organization) {
@@ -59,7 +48,8 @@ class OrganizationRepository
 
         $search = array_filter(
             $organizations,
-            fn (Organization $data) => $data->getName() === $name
+            fn (Organization $data)
+                => strtolower($data->getName()) === strtolower($name)
         );
         if (empty($search)) {
             return null;
@@ -72,7 +62,45 @@ class OrganizationRepository
     {
     }
 
-    public function remove(Organization $entity, bool $flush = false): void
+    public function remove(Organization $entity): void
     {
+        $organizations = $this->readYamlFile();
+        $index = array_search(
+            $entity->getName(),
+            array_column($organizations, 'name')
+        );
+        if (false === $index) {
+            throw new UnexpectedValueException(
+                "Failed getting organization with name {$entity->getName()}"
+            );
+        }
+
+        array_splice($organizations, $index, 1);
+        $data['organizations'] = $organizations;
+        $this->writeYamlFile($data);
+    }
+
+    private function readYamlFile(): array
+    {
+        try {
+            $organizations = Yaml::parseFile($this->yamlFilePath);
+        } catch (Throwable $exception) {
+            throw new UnexpectedValueException(
+                "Failed parsing YAML file {$this->yamlFilePath}"
+            );
+        }
+
+        $organizations = $organizations['organizations'] ?? null;
+        if (null === $organizations) {
+            throw new UnexpectedValueException('Failed getting organizations');
+        }
+
+        return $organizations;
+    }
+
+    private function writeYamlFile(array $organizations): void
+    {
+        $data = Yaml::dump($organizations, 5, 2);
+        file_put_contents($this->yamlFilePath, $data);
     }
 }
